@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ESP32蓝牙控制</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" rel="stylesheet">
+  
+  <!-- 配置Tailwind自定义颜色和字体 -->
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#165DFF',
+            secondary: '#00B42A',
+            danger: '#F53F3F',
+            dark: '#1D2129',
+            light: '#F2F3F5'
+          },
+          fontFamily: {
+            inter: ['Inter', 'system-ui', 'sans-serif'],
+          },
+        },
+      }
+    }
+  </script>
+  
+  <style type="text/tailwindcss">
+    @layer utilities {
+      .content-auto {
+        content-visibility: auto;
+      }
+      .btn-hover {
+        @apply transition-all duration-300 hover:shadow-lg hover:-translate-y-1;
+      }
+      .card-effect {
+        @apply transition-all duration-300 hover:shadow-xl hover:-translate-y-1;
+      }
+    }
+  </style>
+</head>
+<body class="font-inter bg-gray-50 min-h-screen flex flex-col">
+  <!-- 顶部导航 -->
+  <header class="bg-primary text-white shadow-md">
+    <div class="container mx-auto px-4 py-3 flex justify-between items-center">
+      <div class="flex items-center space-x-2">
+        <i class="fa-brands fa-bluetooth-b text-xl"></i>
+        <h1 class="text-xl font-bold">ESP32蓝牙控制</h1>
+      </div>
+      <div id="connection-status" class="px-3 py-1 rounded-full text-sm bg-red-500">
+        未连接
+      </div>
+    </div>
+  </header>
+
+  <!-- 主内容区 -->
+  <main class="flex-grow container mx-auto px-4 py-8">
+    <!-- 设备列表和控制卡片 -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      
+      <!-- 设备连接卡片 -->
+      <div class="bg-white rounded-xl shadow-md p-6 card-effect">
+        <h2 class="text-lg font-semibold mb-4 flex items-center">
+          <i class="fa-solid fa-microchip mr-2 text-primary"></i>设备连接
+        </h2>
+        <div class="space-y-4">
+          <button id="connect-btn" class="w-full bg-primary text-white py-3 rounded-lg btn-hover flex items-center justify-center">
+            <i class="fa-solid fa-search mr-2"></i>扫描设备
+          </button>
+          
+          <div id="device-list" class="hidden mt-4">
+            <h3 class="text-sm font-medium text-gray-500 mb-2">可用设备:</h3>
+            <div id="devices" class="space-y-2 max-h-40 overflow-y-auto"></div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- GPIO控制卡片 -->
+      <div id="control-card" class="bg-white rounded-xl shadow-md p-6 card-effect opacity-50 pointer-events-none">
+        <h2 class="text-lg font-semibold mb-4 flex items-center">
+          <i class="fa-solid fa-sliders mr-2 text-primary"></i>GPIO控制
+        </h2>
+        <div class="space-y-6">
+          <!-- LED控制 -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">LED控制</label>
+            <div class="flex space-x-3">
+              <button id="led-on" class="flex-1 bg-secondary text-white py-3 rounded-lg btn-hover">
+                <i class="fa-solid fa-lightbulb-on mr-2"></i>打开
+              </button>
+              <button id="led-off" class="flex-1 bg-gray-600 text-white py-3 rounded-lg btn-hover">
+                <i class="fa-solid fa-lightbulb-off mr-2"></i>关闭
+              </button>
+            </div>
+          </div>
+          
+          <!-- 自定义GPIO控制 -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">自定义GPIO</label>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">GPIO引脚</label>
+                <input type="number" id="gpio-pin" min="0" max="39" value="2" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50">
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">状态</label>
+                <select id="gpio-value" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50">
+                  <option value="1">高电平 (ON)</option>
+                  <option value="0">低电平 (OFF)</option>
+                </select>
+              </div>
+            </div>
+            <button id="gpio-set" class="w-full mt-3 bg-primary text-white py-3 rounded-lg btn-hover">
+              <i class="fa-solid fa-arrows-turn-right mr-2"></i>设置
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- 日志区域 -->
+    <div class="mt-8 bg-white rounded-xl shadow-md p-6 card-effect">
+      <h2 class="text-lg font-semibold mb-4 flex items-center">
+        <i class="fa-solid fa-terminal mr-2 text-primary"></i>通信日志
+      </h2>
+      <div id="log-area" class="bg-gray-50 rounded-lg p-4 h-40 overflow-y-auto text-sm font-mono">
+        <p class="text-gray-500">等待连接...</p>
+      </div>
+    </div>
+  </main>
+
+  <!-- 页脚 -->
+  <footer class="bg-dark text-white py-4">
+    <div class="container mx-auto px-4 text-center text-sm">
+      <p>ESP32蓝牙控制应用 &copy; 2025</p>
+    </div>
+  </footer>
+
+  <script>
+    // 蓝牙相关变量
+    let bleDevice = null;
+    let bleServer = null;
+    let txCharacteristic = null;
+    let rxCharacteristic = null;
+    
+    // DOM元素
+    const connectBtn = document.getElementById('connect-btn');
+    const deviceList = document.getElementById('device-list');
+    const devicesContainer = document.getElementById('devices');
+    const connectionStatus = document.getElementById('connection-status');
+    const controlCard = document.getElementById('control-card');
+    const ledOnBtn = document.getElementById('led-on');
+    const ledOffBtn = document.getElementById('led-off');
+    const gpioPinInput = document.getElementById('gpio-pin');
+    const gpioValueSelect = document.getElementById('gpio-value');
+    const gpioSetBtn = document.getElementById('gpio-set');
+    const logArea = document.getElementById('log-area');
+    
+    // 服务和特征UUID（与ESP32代码保持一致）
+    const SERVICE_UUID = '4fafc201-1fb5-459e-8fcc-c5c9c331914b';
+    const CHARACTERISTIC_UUID = 'beb5483e-36e1-4688-b7f5-ea07361b26a8';
+    
+    // 检查浏览器支持
+    function checkBluetoothSupport() {
+      if (!navigator.bluetooth) {
+        log('错误: 浏览器不支持Web蓝牙', 'error');
+        connectBtn.disabled = true;
+        connectBtn.classList.add('bg-gray-400');
+        connectBtn.classList.remove('bg-primary');
+        return false;
+      }
+      return true;
+    }
+    
+    // 记录日志
+    function log(message, type = 'info') {
+      const timestamp = new Date().toLocaleTimeString();
+      const logEntry = document.createElement('p');
+      logEntry.className = type === 'error' ? 'text-red-500' : 'text-gray-700';
+      logEntry.innerHTML = `<span class="text-gray-500">${timestamp}</span> ${message}`;
+      logArea.appendChild(logEntry);
+      logArea.scrollTop = logArea.scrollHeight;
+    }
+    
+    // 更新连接状态
+    function updateConnectionStatus(connected) {
+      if (connected) {
+        connectionStatus.textContent = '已连接';
+        connectionStatus.className = 'px-3 py-1 rounded-full text-sm bg-green-500';
+        connectBtn.innerHTML = '<i class="fa-solid fa-plug mr-2"></i>断开连接';
+        connectBtn.classList.remove('bg-primary');
+        connectBtn.classList.add('bg-danger');
+        controlCard.classList.remove('opacity-50', 'pointer-events-none');
+      } else {
+        connectionStatus.textContent = '未连接';
+        connectionStatus.className = 'px-3 py-1 rounded-full text-sm bg-red-500';
+        connectBtn.innerHTML = '<i class="fa-solid fa-search mr-2"></i>扫描设备';
+        connectBtn.classList.remove('bg-danger');
+        connectBtn.classList.add('bg-primary');
+        controlCard.classList.add('opacity-50', 'pointer-events-none');
+        deviceList.classList.add('hidden');
+        bleDevice = null;
+        bleServer = null;
+        txCharacteristic = null;
+        rxCharacteristic = null;
+      }
+    }
+    
+    // 扫描并连接设备
+    async function connectDevice() {
+      if (bleDevice && bleDevice.gatt.connected) {
+        disconnectDevice();
+        return;
+      }
+      
+      try {
+        log('开始扫描蓝牙设备...');
+        
+        // 显示设备列表
+        deviceList.classList.remove('hidden');
+        devicesContainer.innerHTML = '';
+        
+        // 请求蓝牙设备
+        bleDevice = await navigator.bluetooth.requestDevice({
+          filters: [{ services: [SERVICE_UUID] }],
+          optionalServices: [SERVICE_UUID]
+        });
+        
+        log(`已发现设备: ${bleDevice.name || '未知设备'}`);
+        
+        // 连接到GATT服务器
+        bleServer = await bleDevice.gatt.connect();
+        log('已连接到GATT服务器');
+        
+        // 获取服务和特征
+        const service = await bleServer.getPrimaryService(SERVICE_UUID);
+        txCharacteristic = await service.getCharacteristic(CHARACTERISTIC_UUID);
+        
+        // 如果特征支持通知，启用通知
+        if (txCharacteristic.properties.notify) {
+          await txCharacteristic.startNotifications();
+          txCharacteristic.addEventListener('characteristicvaluechanged', handleNotifications);
+          log('已启用通知');
+        }
+        
+        updateConnectionStatus(true);
+        log('连接成功，可以开始控制');
+        
+      } catch (error) {
+        log(`连接失败: ${error.message}`, 'error');
+        updateConnectionStatus(false);
+      }
+    }
+    
+    // 处理通知
+    function handleNotifications(event) {
+      const value = new TextDecoder().decode(event.target.value);
+      log(`收到数据: ${value}`);
+    }
+    
+    // 断开连接
+    function disconnectDevice() {
+      if (bleDevice && bleDevice.gatt.connected) {
+        bleDevice.gatt.disconnect();
+        log('已断开连接');
+        updateConnectionStatus(false);
+      }
+    }
+    
+    // 发送数据到ESP32
+    async function sendData(data) {
+      if (!txCharacteristic) {
+        log('未连接到设备', 'error');
+        return;
+      }
+      
+      try {
+        log(`发送数据: ${data}`);
+        await txCharacteristic.writeValueWithResponse(new TextEncoder().encode(data));
+      } catch (error) {
+        log(`发送失败: ${error.message}`, 'error');
+      }
+    }
+    
+    // 初始化
+    function init() {
+      if (!checkBluetoothSupport()) return;
+      
+      // 事件监听器
+      connectBtn.addEventListener('click', connectDevice);
+      ledOnBtn.addEventListener('click', () => sendData('ON'));
+      ledOffBtn.addEventListener('click', () => sendData('OFF'));
+      
+      gpioSetBtn.addEventListener('click', () => {
+        const pin = gpioPinInput.value;
+        const value = gpioValueSelect.value;
+        sendData(`SET,${pin},${value}`);
+      });
+      
+      // 添加断开连接事件监听
+      if (navigator.bluetooth) {
+        navigator.bluetooth.addEventListener('disconnection', (event) => {
+          if (event.device === bleDevice) {
+            log('设备断开连接', 'error');
+            updateConnectionStatus(false);
+          }
+        });
+      }
+    }
+    
+    // 页面加载完成后初始化
+    window.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>
